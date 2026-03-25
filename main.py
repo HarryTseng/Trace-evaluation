@@ -13,8 +13,8 @@ app = FastAPI()
 
 SERVICE_NAME = os.getenv("SERVICE_NAME")
 TARGET_URL = os.getenv("TARGET_URL")
-INTERNAL_ERROR_RATE = float(os.getenv("INTERNAL_ERROR_RATE"))
-RETURN_ERROR_RATE = float(os.getenv("RETURN_ERROR_RATE"))
+UPSTREAM_ERROR_RATE = float(os.getenv("UPSTREAM_ERROR_RATE"))
+DOWNSTREAM_ERROR_RATE = float(os.getenv("DOWNSTREAM_ERROR_RATE"))
 TOPOLOGY_TYPE = os.getenv("TOPOLOGY_TYPE")
 
 resource = Resource.create({"service.name": SERVICE_NAME})
@@ -33,8 +33,8 @@ def hello(request: Request):
     with tracer.start_as_current_span(f"{SERVICE_NAME}_Job", context=context, record_exception=False) as span:
         try:
             # 節點內部邏輯
-            if random.random() < INTERNAL_ERROR_RATE:
-                raise Exception("Internal error")
+            if random.random() < UPSTREAM_ERROR_RATE:
+                raise Exception("Upstream Error Happen")
             
             # 把trace資訊注入header
             if TARGET_URL:
@@ -50,8 +50,8 @@ def hello(request: Request):
                         span.add_event("request_fail", {"status_code": res.status_code})
                         raise Exception("Downstream Error")
                 
-                if random.random() < RETURN_ERROR_RATE:
-                    raise Exception("Return Value Not Accepted")
+                if random.random() < DOWNSTREAM_ERROR_RATE:
+                    raise Exception("Downstream Error Happen")
             
             return {"status": "success"}
         
