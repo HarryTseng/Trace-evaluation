@@ -28,8 +28,8 @@ def generate():
                 f"SERVICE_NAME={name}",
                 f"TARGET_URL={target_str}",
                 f"TOPOLOGY_TYPE={TOPOLOGY_TYPE}",
-                "INTERNAL_ERROR_RATE=0.01",
-                "RETURN_ERROR_RATE=0.5",
+                "UPSTREAM_ERROR_RATE=0.01",
+                "DOWNSTREAM_ERROR_RATE=0.05",
                 "OTEL_COLLECTOR_URL=http://collector:4318/v1/traces"
             ],
             "ports": [f"{8000 + i - 1}:8000"],
