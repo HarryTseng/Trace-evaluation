@@ -1,7 +1,14 @@
 import yaml
 
 NUM_SERVICES = 5
-TOPOLOGY_TYPE = "FAN_OUT"  # 可選: "CHAIN" 或 "FAN_OUT"
+TOPOLOGY_TYPE = "FAN_OUT"  #CHAIN, FAN_OUT, CONSTRAINT
+
+DEFAULT_UPSTREAM = 0.01
+DEFAULT_DOWNSTREAM = 0.05
+
+#For CONSTRAINT topology
+BASE_UPSTREAM = 0.01
+BASE_DOWNSTREAM = 0.04
 
 def generate():
     services = {}
@@ -10,7 +17,7 @@ def generate():
         name = f"service-{i}"
         targets = []
 
-        if TOPOLOGY_TYPE == "CHAIN":
+        if TOPOLOGY_TYPE in ["CHAIN", "CONSTRAINT"]:
             if i < NUM_SERVICES:
                 targets.append(f"http://service-{i+1}:8000/hello")
         
@@ -19,6 +26,13 @@ def generate():
                 for j in range(2, NUM_SERVICES + 1):
                     targets.append(f"http://service-{j}:8000/hello")
 
+        if TOPOLOGY_TYPE == "CONSTRAINT":
+            up_rate = round(BASE_UPSTREAM * i, 2)
+            down_rate = round(BASE_DOWNSTREAM * i, 2)
+        else:
+            up_rate = DEFAULT_UPSTREAM
+            down_rate = DEFAULT_DOWNSTREAM
+        
         target_str = ",".join(targets)
         
         services[name] = {
@@ -28,8 +42,8 @@ def generate():
                 f"SERVICE_NAME={name}",
                 f"TARGET_URL={target_str}",
                 f"TOPOLOGY_TYPE={TOPOLOGY_TYPE}",
-                "UPSTREAM_ERROR_RATE=0.01",
-                "DOWNSTREAM_ERROR_RATE=0.05",
+                f"UPSTREAM_ERROR_RATE={up_rate}",
+                f"DOWNSTREAM_ERROR_RATE={down_rate}",
                 "OTEL_COLLECTOR_URL=http://collector:4318/v1/traces"
             ],
             "ports": [f"{8000 + i - 1}:8000"],
