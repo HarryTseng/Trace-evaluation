@@ -1,7 +1,8 @@
 import os
 import random
 from fastapi import FastAPI, HTTPException, Request
-import requests
+import httpx
+import asyncio
 from opentelemetry.trace import StatusCode
 from opentelemetry import trace, propagate
 from opentelemetry.sdk.trace import TracerProvider
@@ -26,7 +27,7 @@ tracer = trace.get_tracer("my-experiment")
 @app.get("/hello")
 
 # 
-def hello(request: Request):
+async def hello(request: Request):
     context = propagate.extract(request.headers)
 
     # 手動建立Span
@@ -43,12 +44,24 @@ def hello(request: Request):
                 
                 URLS = TARGET_URL.split(',') if TOPOLOGY_TYPE == "FAN_OUT" else [TARGET_URL]
 
+                async with httpx.AsyncClient() as client:
+                    if TOPOLOGY_TYPE == "FAN_OUT":
+                        tasks = [client.get(URL, headers=headers) for URL in URLS]
+                        print(f"Sending requests to: {URLS}")
+                        responses = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                        for res in responses:
+                            if isinstance(res, Exception) or res.status_code != 200:
+                                span.add_event("request_fail", {"error": str(res)})
+                                raise Exception("Downstream Error")
+
                 # 發request
-                for URL in URLS:
-                    res = requests.get(URL, headers=headers)
-                    if res.status_code != 200:
-                        span.add_event("request_fail", {"status_code": res.status_code})
-                        raise Exception("Downstream Error")
+                    else:
+                        for URL in URLS:
+                            res = await client.get(URL, headers=headers)
+                            if res.status_code != 200:
+                                span.add_event("request_fail", {"status_code": res.status_code})
+                                raise Exception("Downstream Error")
                 
                 if random.random() < DOWNSTREAM_ERROR_RATE:
                     raise Exception("Downstream Error Happen")
