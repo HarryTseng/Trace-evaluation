@@ -3,13 +3,6 @@ import yaml
 NUM_SERVICES = 5
 TOPOLOGY_TYPE = "FAN_OUT"  #CHAIN, FAN_OUT, CONSTRAINT
 
-DEFAULT_UPSTREAM = 0.01
-DEFAULT_DOWNSTREAM = 0.05
-
-#For CONSTRAINT topology
-BASE_UPSTREAM = 0.01
-BASE_DOWNSTREAM = 0.04
-
 def generate():
     services = {}
     
@@ -27,11 +20,11 @@ def generate():
                     targets.append(f"http://service-{j}:8000/hello")
 
         if TOPOLOGY_TYPE == "CONSTRAINT":
-            up_rate = round(BASE_UPSTREAM * i, 2)
-            down_rate = round(BASE_DOWNSTREAM * i, 2)
+            up_rate = round(0.01 * i, 2)
+            down_rate = round(0.04 * i, 2)
         else:
-            up_rate = DEFAULT_UPSTREAM
-            down_rate = DEFAULT_DOWNSTREAM
+            up_rate = 0.01
+            down_rate = 0.04
         
         target_str = ",".join(targets)
         
