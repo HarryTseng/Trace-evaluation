@@ -8,24 +8,18 @@ receivers:
 
 processors:
   batch: {}
-  
-
   tail_sampling:
     decision_wait: 5s
-    num_traces: 100
-    expected_new_traces_per_sec: 10
 
     policies:
       - name: always
         type: always_sample
-    #   - name: error-trace
-    #     type: status_code
-    #     status_code:
-    #       # status_codes: [ERROR]
 
 exporters:
   debug:
     verbosity: detailed
+  file:
+    path: /etc/otelcol/traces.json
 
 service:
   telemetry:
@@ -41,4 +35,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [tail_sampling, batch]
-      exporters: [debug]
+      exporters: [debug, file]
