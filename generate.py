@@ -2,6 +2,7 @@ import yaml
 
 NUM_SERVICES = 5
 TOPOLOGY_TYPE = "FAN_OUT"  #CHAIN, FAN_OUT, CONSTRAINT
+COLLECTOR_IP = 192.168.50.201
 
 def generate():
     services = {}
@@ -31,7 +32,8 @@ def generate():
         services[name] = {
             "profiles": ["service"],
             "build": ".",
-            "command": "uvicorn main:app --host 0.0.0.0 --port 8000",            
+            "command": "uvicorn main:app --host 0.0.0.0 --port 8000",  
+            "extra_hosts": [f"collector:{COLLECTOR_IP}"],          
             "environment": [
                 f"SERVICE_NAME={name}",
                 f"TARGET_URL={target_str}",
