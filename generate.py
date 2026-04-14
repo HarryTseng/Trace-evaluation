@@ -2,7 +2,7 @@ import yaml
 
 NUM_SERVICES = 5
 TOPOLOGY_TYPE = "FAN_OUT"  #CHAIN, FAN_OUT, CONSTRAINT
-COLLECTOR_IP = 192.168.50.201
+COLLECTOR_IP = "192.168.50.201"
 
 def generate():
     services = {}
