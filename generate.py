@@ -29,6 +29,7 @@ def generate():
         target_str = ",".join(targets)
         
         services[name] = {
+            "profiles": ["service"],
             "build": ".",
             "command": "uvicorn main:app --host 0.0.0.0 --port 8000",
             "environment": [
