@@ -45,7 +45,8 @@ def generate():
     services["collector"] = {
         "image": "otel/opentelemetry-collector-contrib:latest",
         "command": ["--config=/etc/otelcol/config.yaml"],
-        "volumes": ["./config.yaml:/etc/otelcol/config.yaml"],
+        "volumes": ["./config.yaml:/etc/otelcol/config.yaml",
+                    "./:/etc/otelcol/"],
         "ports": ["4317:4317", "4318:4318", "8888:8888"]
     }
 
