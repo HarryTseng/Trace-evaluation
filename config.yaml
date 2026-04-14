@@ -8,12 +8,15 @@ receivers:
 
 processors:
   batch: {}
+  
   tail_sampling:
     decision_wait: 5s
 
     policies:
-      - name: always
-        type: always_sample
+      - name: error-trace
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
 
 exporters:
   debug:
