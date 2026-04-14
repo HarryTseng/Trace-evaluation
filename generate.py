@@ -31,7 +31,7 @@ def generate():
         services[name] = {
             "profiles": ["service"],
             "build": ".",
-            "command": "uvicorn main:app --host 0.0.0.0 --port 8000",
+            "command": "uvicorn main:app --host 0.0.0.0 --port 8000",            
             "environment": [
                 f"SERVICE_NAME={name}",
                 f"TARGET_URL={target_str}",
@@ -44,6 +44,7 @@ def generate():
         }
 
     services["collector"] = {
+        "profiles": ["collector"],
         "image": "otel/opentelemetry-collector-contrib:latest",
         "command": ["--config=/etc/otelcol/config.yaml"],
         "volumes": ["./config.yaml:/etc/otelcol/config.yaml",
