@@ -9,36 +9,39 @@ receivers:
 processors:
   batch: {}
   
-  probabilistic_sampler:
-    sampling_percentage: 100
+    # probabilistic_sampler:
+    #sampling_percentage: 100
 
-  # tail_sampling:
-  #   decision_wait: 5s
+  tail_sampling:
+    #decision_wait: 5s
 
-  #   policies:
-      # - name: error-trace
-      #   type: status_code
-      #   status_code:
-      #     status_codes: [ERROR]
+    policies:
+      - name: error-trace
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
 
 exporters:
   debug:
     verbosity: detailed
   file:
     path: /etc/otelcol/traces.json
+  prometheus:
+    endpoint: "0.0.0.0:8080"
+    resource_to_telemetry_conversion:
+      enabled: true
 
 service:
   telemetry:
     metrics:
       level: detailed
-      readers:
-        - pull:
-            exporter:
-              prometheus:
-                host: '0.0.0.0'
-                port: 8888
+
   pipelines:
     traces:
       receivers: [otlp]
       processors: [tail_sampling, batch]
       exporters: [debug, file]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, debug]
