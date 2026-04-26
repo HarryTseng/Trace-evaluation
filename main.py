@@ -10,18 +10,25 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, ParentBased, ALWAYS_ON
 
 # --- 原有配置保持不變 ---
 SERVICE_NAME = os.getenv("SERVICE_NAME")
 TARGET_URL = os.getenv("TARGET_URL")
 UPSTREAM_ERROR_RATE = float(os.getenv("UPSTREAM_ERROR_RATE", 0))
 DOWNSTREAM_ERROR_RATE = float(os.getenv("DOWNSTREAM_ERROR_RATE", 0))
+HEAD_SAMPLING_RATE = float(os.getenv("HEAD_SAMPLING_RATE", "1.0"))
 TOPOLOGY_TYPE = os.getenv("TOPOLOGY_TYPE")
 URLS = TARGET_URL.split(',') if (TARGET_URL and TOPOLOGY_TYPE == "FAN_OUT") else ([TARGET_URL] if TARGET_URL else [])
 
+custom_sampler = ParentBased(root=TraceIdRatioBased(HEAD_SAMPLING_RATE))
+
 # --- OpenTelemetry 設定 ---
 resource = Resource.create({"service.name": SERVICE_NAME})
-provider = TracerProvider(resource=resource)
+provider = TracerProvider(
+    resource=resource,
+    sampler=custom_sampler
+    )
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint="http://collector:4318/v1/traces")))
 trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("my-experiment")
