@@ -57,7 +57,7 @@ def generate():
         "command": ["--config=/etc/otelcol/config.yaml"],
         "volumes": ["./config.yaml:/etc/otelcol/config.yaml",
                     "./:/etc/otelcol/"],
-        "ports": ["4317:4317", "4318:4318", "8888:8888"]
+        "ports": ["4317:4317", "4318:4318", "8888:8888", "8080:8080"]
     }
 
     with open("docker-compose.yaml", "w") as f:
