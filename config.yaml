@@ -9,12 +9,10 @@ receivers:
 processors:
   batch: {}
   
-    # probabilistic_sampler:
-    #sampling_percentage: 100
+  probabilistic_sampler:
+    sampling_percentage: 100
 
   tail_sampling:
-    #decision_wait: 5s
-
     policies:
       - name: error-trace
         type: status_code
