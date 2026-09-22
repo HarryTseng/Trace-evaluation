@@ -12,6 +12,34 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
+//Otel
+const { Resource } = require('@opentelemetry/resources');
+const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
+const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+const { trace, context, propagation } = require('@opentelemetry/api');
+
+const serviceName = process.env.SERVICE_NAME || 'ratings';
+const serviceVersion = process.env.SERVICE_VERSION || 'v1';
+const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
+
+const provider = new NodeTracerProvider({
+  resource: new Resource({
+    [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
+    [SemanticResourceAttributes.SERVICE_VERSION]: serviceVersion,
+  }),
+});
+
+const exporter = new OTLPTraceExporter({
+  url: otlpEndpoint,
+});
+
+provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
+provider.register();
+
+const tracer = trace.getTracer('ratings-tracer');
+
 var http = require('http')
 var dispatcher = require('httpdispatcher')
 
@@ -250,12 +278,27 @@ function getLocalReviews (productId) {
 }
 
 function handleRequest (request, response) {
-  try {
-    console.log(request.method + ' ' + request.url)
-    dispatcher.dispatch(request, response)
-  } catch (err) {
-    console.log(err)
-  }
+  //header extract
+  const activeContext = propagation.extract(context.active(), request.headers);
+
+  const span = tracer.startSpan('ratings', undefined, activeContext);
+
+  context.with(trace.setSpan(activeContext, span), () => {
+    try {
+      console.log(request.method + ' ' + request.url);
+      
+      response.on('finish', () => {
+        span.setAttribute('http.status_code', response.statusCode);
+        span.end();
+      });
+
+      dispatcher.dispatch(request, response);
+    } catch (err) {
+      console.log(err);
+      span.recordException(err);
+      span.end();
+    }
+  });
 }
 
 var server = http.createServer(handleRequest)
