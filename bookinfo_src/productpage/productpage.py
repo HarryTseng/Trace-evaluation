@@ -15,13 +15,21 @@
 #   limitations under the License.
 
 import time
+import random
+from fastapi import HTTPException
 from flask import Flask, request, session, render_template, redirect, g
 from json2html import json2html
 from opentelemetry import trace
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
-from opentelemetry.propagate import set_global_textmap
-from opentelemetry.propagators.b3 import B3MultiFormat
+# from opentelemetry.instrumentation.flask import FlaskInstrumentor
+# from opentelemetry.propagate import set_global_textmap
+# from opentelemetry.propagators.b3 import B3MultiFormat
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, ParentBased
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry import propagate
+from opentelemetry.trace import StatusCode
 from prometheus_client import Counter, generate_latest
 import asyncio
 import logging
@@ -38,7 +46,31 @@ import http.client as http_client
 http_client.HTTPConnection.debuglevel = 0
 
 app = Flask(__name__)
-FlaskInstrumentor().instrument_app(app)
+
+# global env
+SERVICE_NAME = os.getenv("SERVICE_NAME", "productpage")
+HEAD_SAMPLING_RATE = float(os.getenv("HEAD_SAMPLING_RATE", "1.0"))
+UPSTREAM_ERROR_RATE = float(os.getenv("UPSTREAM_ERROR_RATE", 0))
+DOWNSTREAM_ERROR_RATE = float(os.getenv("DOWNSTREAM_ERROR_RATE", 0))
+
+#Otel
+custom_sampler = ParentBased(root=TraceIdRatioBased(HEAD_SAMPLING_RATE))
+resource = Resource.create({"service.name": SERVICE_NAME})
+provider = TracerProvider(
+    resource=resource,
+    sampler=custom_sampler
+)
+
+provider.add_span_processor(
+    BatchSpanProcessor(
+        OTLPSpanExporter(
+            endpoint="http://collector:4318/v1/traces"
+        )
+    )
+)
+trace.set_tracer_provider(provider)
+tracer = trace.get_tracer("my-experiment")
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 requests_log = logging.getLogger("requests.packages.urllib3")
 requests_log.setLevel(logging.INFO)
@@ -113,21 +145,22 @@ request_result_counter = Counter('request_result', 'Results of requests', ['dest
 # extract/inject context, etc.
 
 
-propagator = B3MultiFormat()
-set_global_textmap(B3MultiFormat())
-provider = TracerProvider()
-# Sets the global default tracer provider
-trace.set_tracer_provider(provider)
+# propagator = B3MultiFormat()
+# set_global_textmap(B3MultiFormat())
+# provider = TracerProvider()
+# # Sets the global default tracer provider
+# trace.set_tracer_provider(provider)
 
-tracer = trace.get_tracer(__name__)
+# tracer = trace.get_tracer(__name__)
 
 
-def getForwardHeaders(request):
+def getForwardHeaders(request, context=None):
     headers = {}
 
-    # x-b3-*** headers can be populated using the OpenTelemetry span
-    ctx = propagator.extract(carrier={k.lower(): v for k, v in request.headers})
-    propagator.inject(headers, ctx)
+    if context:
+        propagate.inject(headers, context=context)
+    else:
+        propagate.inject(headers)
 
     # We handle other (non x-b3-***) headers manually
     if 'user' in session:
@@ -156,8 +189,8 @@ def getForwardHeaders(request):
 
         # W3C Trace Context. Compatible with OpenCensusAgent and Stackdriver Istio
         # configurations.
-        'traceparent',
-        'tracestate',
+        # 'traceparent',
+        # 'tracestate',
 
         # Cloud trace context. Compatible with OpenCensusAgent and Stackdriver Istio
         # configurations.
@@ -260,24 +293,40 @@ def floodReviews(product_id, headers):
 
 @app.route('/productpage')
 def front():
-    product_id = 0  # TODO: replace default value
-    headers = getForwardHeaders(request)
-    user = session.get('user', '')
-    product = getProduct(product_id)
-    detailsStatus, details = getProductDetails(product_id, headers)
+    context = propagate.extract(request.headers)
+    with tracer.start_as_current_span("productpage", context=context, record_exception=False) as span:
 
-    if flood_factor > 0:
-        floodReviews(product_id, headers)
+        try:
+            if random.random() < UPSTREAM_ERROR_RATE:
+                raise Exception("Upstream Error Happen")
 
-    reviewsStatus, reviews = getProductReviews(product_id, headers)
-    return render_template(
-        'productpage.html',
-        detailsStatus=detailsStatus,
-        reviewsStatus=reviewsStatus,
-        product=product,
-        details=details,
-        reviews=reviews,
-        user=user)
+            product_id = 1  # TODO: replace default value
+            headers = getForwardHeaders(request, context=trace.set_span_in_context(span))
+            user = session.get('user', '')
+            product = getProduct(product_id)
+            detailsStatus, details = getProductDetails(product_id, headers)
+
+            if flood_factor > 0:
+                floodReviews(product_id, headers)
+
+            reviewsStatus, reviews = getProductReviews(product_id, headers)
+
+            if random.random() < UPSTREAM_ERROR_RATE + DOWNSTREAM_ERROR_RATE:
+                raise Exception("Downstream Error Happen")
+
+            return render_template(
+                'productpage.html',
+                detailsStatus=detailsStatus,
+                reviewsStatus=reviewsStatus,
+                product=product,
+                details=details,
+                reviews=reviews,
+                user=user)
+        
+        except Exception as e:
+            span.set_status(StatusCode.ERROR)
+            span.set_attribute("error.msg", str(e))
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 # The API:
