@@ -18,6 +18,28 @@ require 'webrick'
 require 'json'
 require 'net/http'
 
+# Otel
+require 'opentelemetry/sdk'
+require 'opentelemetry/exporter/otlp'
+
+service_name = ENV['SERVICE_NAME'] || 'details'
+service_version = ENV['SERVICE_VERSION'] || 'v1'
+otlp_endpoint = ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318/v1/traces'
+
+OpenTelemetry::SDK.configure do |c|
+  c.service_name = service_name
+  c.service_version = service_version
+  
+  c.use_all if respond_to?(:use_all)
+
+  exporter = OpenTelemetry::Exporter::OTLP::Exporter.new(endpoint: otlp_endpoint)
+  c.add_span_processor(
+    OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(exporter)
+  )
+end
+
+tracer = OpenTelemetry.tracer_provider.tracer('details-tracer')
+
 if ARGV.length < 1 then
     puts "usage: #{$PROGRAM_NAME} port"
     exit(-1)
@@ -40,23 +62,42 @@ server.mount_proc '/health' do |req, res|
 end
 
 server.mount_proc '/details' do |req, res|
-    pathParts = req.path.split('/')
-    headers = get_forward_headers(req)
+begin
+    #整理WEBrick header
+    carrier = {}
+    req.header.each do |k, v|
+      carrier[k.downcase] = v.is_a?(Array) ? v.first.to_s : v.to_s
+    end
 
-    begin
+    extracted_context = begin
+      OpenTelemetry.propagation.extract(carrier)
+    rescue => e
+      OpenTelemetry.logger.error("Context extract failed: #{e.message}")
+      OpenTelemetry::Context.current
+    end
+
+    OpenTelemetry::Context.with_current(extracted_context) do
+      tracer.in_span('details') do |span|
+        pathParts = req.path.split('/')
+        headers = get_forward_headers(req)
+
         begin
           id = Integer(pathParts[-1])
-        rescue
-          raise 'please provide numeric product id'
+          details = get_book_details(id, headers)
+          res.body = details.to_json
+          res['Content-Type'] = 'application/json'
+        rescue => error
+          span.record_exception(error)
+          span.status = OpenTelemetry::Trace::Status.error(error.message)
+          res.body = {'error' => error.message}.to_json
+          res['Content-Type'] = 'application/json'
+          res.status = 400
         end
-        details = get_book_details(id, headers)
-        res.body = details.to_json
-        res['Content-Type'] = 'application/json'
-    rescue => error
-        res.body = {'error' => error}.to_json
-        res['Content-Type'] = 'application/json'
-        res.status = 400
+      end
     end
+  rescue => outer_error
+    puts "Outer Exception: #{outer_error.message}"
+  end
 end
 
 # TODO: provide details on different books.
