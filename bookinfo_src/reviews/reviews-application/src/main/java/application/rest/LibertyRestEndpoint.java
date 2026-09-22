@@ -32,9 +32,79 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.StringReader;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.context.propagation.TextMapGetter;
+import io.opentelemetry.context.propagation.TextMapSetter;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.samplers.Sampler;
+import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
+import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter;
+import io.opentelemetry.sdk.resources.Resource;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 
 @Path("/")
 public class LibertyRestEndpoint extends Application {
+  
+  // Global env
+  private static final String SERVICE_NAME = System.getenv("SERVICE_NAME") == null ? "reviews"
+      : System.getenv("SERVICE_NAME");
+  private static final double HEAD_SAMPLING_RATE = Double.parseDouble(
+      System.getenv("HEAD_SAMPLING_RATE") == null ? "1.0" : System.getenv("HEAD_SAMPLING_RATE"));
+
+  private static final Tracer tracer;
+  private static final OpenTelemetry openTelemetry;
+
+  static {
+    //Otel
+    Sampler sampler = Sampler.parentBased(Sampler.traceIdRatioBased(HEAD_SAMPLING_RATE));
+
+    String serviceVersion = System.getenv("SERVICE_VERSION") == null ? "v1" : System.getenv("SERVICE_VERSION");
+
+    Resource resource = Resource.getDefault().merge(
+        Resource.create(Attributes.of(
+            AttributeKey.stringKey("service.name"), SERVICE_NAME,
+            AttributeKey.stringKey("service.version"), serviceVersion  // <--- 新增這行
+        )));
+
+    String otlpEndpoint = System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") == null
+        ? "http://localhost:4318/v1/traces"
+        : System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT");
+
+    OtlpHttpSpanExporter otlpExporter = OtlpHttpSpanExporter.builder()
+        .setEndpoint(otlpEndpoint)
+        .build();
+
+    SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
+        .setResource(resource)
+        .setSampler(sampler)
+        .addSpanProcessor(BatchSpanProcessor.builder(otlpExporter).build())
+        .build();
+
+    openTelemetry = OpenTelemetrySdk.builder()
+        .setTracerProvider(tracerProvider)
+        .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
+        .build();
+
+    tracer = openTelemetry.getTracer("my-experiment");
+  }
+
+  private static final TextMapGetter<HttpHeaders> GETTER=new TextMapGetter<HttpHeaders>(){@Override public Iterable<String>keys(HttpHeaders carrier){return carrier.getRequestHeaders().keySet();}
+
+  @Override public String get(HttpHeaders carrier,String key){return carrier.getHeaderString(key);}};
+
+  private static final TextMapSetter<Invocation.Builder> SETTER = (carrier, key, value) -> {
+    if (carrier != null && key != null && value != null) {
+      carrier.header(key, value);
+    }
+  };
 
     private final static Boolean ratings_enabled = Boolean.valueOf(System.getenv("ENABLE_RATINGS"));
     private final static String star_color = System.getenv("STAR_COLOR") == null ? "black" : System.getenv("STAR_COLOR");
@@ -184,25 +254,43 @@ public class LibertyRestEndpoint extends Application {
     @GET
     @Path("/reviews/{productId}")
     public Response bookReviewsById(@PathParam("productId") int productId, @Context HttpHeaders requestHeaders) {
-      int starsReviewer1 = -1;
-      int starsReviewer2 = -1;
+      
+      //header extract
+      io.opentelemetry.context.Context parentContext = openTelemetry.getPropagators()
+            .getTextMapPropagator()
+            .extract(io.opentelemetry.context.Context.current(), requestHeaders, GETTER);
 
-      if (ratings_enabled) {
-        JsonObject ratingsResponse = getRatings(Integer.toString(productId), requestHeaders);
-        if (ratingsResponse != null) {
-          if (ratingsResponse.containsKey("ratings")) {
-            JsonObject ratings = ratingsResponse.getJsonObject("ratings");
-            if (ratings.containsKey("Reviewer1")){
-          	  starsReviewer1 = ratings.getInt("Reviewer1");
+      Span span = tracer.spanBuilder("reviews")
+          .setParent(parentContext)
+          .startSpan();
+
+      try (Scope scope = span.makeCurrent()) {
+            int starsReviewer1 = -1;
+            int starsReviewer2 = -1;
+
+            if (ratings_enabled) {
+                JsonObject ratingsResponse = getRatings(Integer.toString(productId), requestHeaders);
+                if (ratingsResponse != null) {
+                    if (ratingsResponse.containsKey("ratings")) {
+                        JsonObject ratings = ratingsResponse.getJsonObject("ratings");
+                        if (ratings.containsKey("Reviewer1")) {
+                            starsReviewer1 = ratings.getInt("Reviewer1");
+                        }
+                        if (ratings.containsKey("Reviewer2")) {
+                            starsReviewer2 = ratings.getInt("Reviewer2");
+                        }
+                    }
+                }
             }
-            if (ratings.containsKey("Reviewer2")){
-              starsReviewer2 = ratings.getInt("Reviewer2");
-            }
-          }
+
+            String jsonResStr = getJsonResponse(Integer.toString(productId), starsReviewer1, starsReviewer2);
+            return Response.ok().type(MediaType.APPLICATION_JSON).entity(jsonResStr).build();
+        } catch (Exception e) {
+            span.recordException(e);
+            span.setStatus(StatusCode.ERROR, e.getMessage());
+            throw e;
+        } finally {
+            span.end();
         }
-      }
-
-      String jsonResStr = getJsonResponse(Integer.toString(productId), starsReviewer1, starsReviewer2);
-      return Response.ok().type(MediaType.APPLICATION_JSON).entity(jsonResStr).build();
     }
 }
