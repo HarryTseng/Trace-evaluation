@@ -291,6 +291,9 @@ public class LibertyRestEndpoint extends Application {
                         }
                     }
                 }
+                else {
+                  throw new RuntimeException("Downstream Error");
+                }
             }
             
             //downstream error
