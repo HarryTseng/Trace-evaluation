@@ -58,6 +58,10 @@ public class LibertyRestEndpoint extends Application {
       : System.getenv("SERVICE_NAME");
   private static final double HEAD_SAMPLING_RATE = Double.parseDouble(
       System.getenv("HEAD_SAMPLING_RATE") == null ? "1.0" : System.getenv("HEAD_SAMPLING_RATE"));
+  private  static final double UPSTREAM_ERROR_RATE = Double.parseDouble(
+    System.getenv("UPSTREAM_ERROR_RATE") == null ? "0.01" : System.getenv("UPSTREAM_ERROR_RATE"));
+  private  static final double DOWNSTREAM_ERROR_RATE = Double.parseDouble(
+    System.getenv("DOWNSTREAM_ERROR_RATE") == null ? "0.04" : System.getenv("DOWNSTREAM_ERROR_RATE"));
 
   private static final Tracer tracer;
   private static final OpenTelemetry openTelemetry;
@@ -71,7 +75,7 @@ public class LibertyRestEndpoint extends Application {
     Resource resource = Resource.getDefault().merge(
         Resource.create(Attributes.of(
             AttributeKey.stringKey("service.name"), SERVICE_NAME,
-            AttributeKey.stringKey("service.version"), serviceVersion  // <--- 新增這行
+            AttributeKey.stringKey("service.version"), serviceVersion
         )));
 
     String otlpEndpoint = System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") == null
@@ -265,6 +269,12 @@ public class LibertyRestEndpoint extends Application {
           .startSpan();
 
       try (Scope scope = span.makeCurrent()) {
+
+            //upstream error
+            if (Math.random() < UPSTREAM_ERROR_RATE) {
+              throw new RuntimeException("Upstream Error");
+            }
+
             int starsReviewer1 = -1;
             int starsReviewer2 = -1;
 
@@ -281,6 +291,11 @@ public class LibertyRestEndpoint extends Application {
                         }
                     }
                 }
+            }
+            
+            //downstream error
+            if (Math.random() < UPSTREAM_ERROR_RATE + DOWNSTREAM_ERROR_RATE) {
+              throw new RuntimeException("Downstream Error");
             }
 
             String jsonResStr = getJsonResponse(Integer.toString(productId), starsReviewer1, starsReviewer2);
