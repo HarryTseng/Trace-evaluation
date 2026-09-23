@@ -26,6 +26,9 @@ service_name = ENV['SERVICE_NAME'] || 'details'
 service_version = ENV['SERVICE_VERSION'] || 'v1'
 otlp_endpoint = ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318/v1/traces'
 
+UPSTREAM_ERROR_RATE = (ENV['UPSTREAM_ERROR_RATE'] || '0.01').to_f
+DOWNSTREAM_ERROR_RATE = (ENV['DOWNSTREAM_ERROR_RATE'] || '0.04').to_f
+
 OpenTelemetry::SDK.configure do |c|
   c.service_name = service_name
   c.service_version = service_version
@@ -75,15 +78,26 @@ begin
       OpenTelemetry.logger.error("Context extract failed: #{e.message}")
       OpenTelemetry::Context.current
     end
-
+  
     OpenTelemetry::Context.with_current(extracted_context) do
       tracer.in_span('details') do |span|
         pathParts = req.path.split('/')
         headers = get_forward_headers(req)
 
+        # Upstream error
+        if rand < UPSTREAM_ERROR_RATE
+          raise StandardError, "Upstream Error"
+        end
+
         begin
           id = Integer(pathParts[-1])
           details = get_book_details(id, headers)
+
+          # Downstream error
+          if rand < (UPSTREAM_ERROR_RATE + DOWNSTREAM_ERROR_RATE)
+            raise StandardError, "Downstream Error"
+          end
+
           res.body = details.to_json
           res['Content-Type'] = 'application/json'
         rescue => error
