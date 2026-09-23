@@ -24,7 +24,7 @@ require 'opentelemetry/exporter/otlp'
 
 service_name = ENV['SERVICE_NAME'] || 'details'
 service_version = ENV['SERVICE_VERSION'] || 'v1'
-otlp_endpoint = ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318/v1/traces'
+otlp_endpoint = 'http://collector:4318/v1/traces'
 
 UPSTREAM_ERROR_RATE = (ENV['UPSTREAM_ERROR_RATE'] || '0.01').to_f
 HEAD_SAMPLING_RATE = (ENV['HEAD_SAMPLING_RATE'] || '1.0').to_f

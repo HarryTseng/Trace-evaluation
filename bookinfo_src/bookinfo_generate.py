@@ -1,7 +1,7 @@
 import yaml
 
-COLLECTOR_IP = "127.0.0.1"
-HEAD_SAMPLING_RATE = 1  # 0是tail
+COLLECTOR_IP = "192.168.50.56"
+HEAD_SAMPLING_RATE = 0  # 0是tail
 
 SERVICES_CONFIG = {
     "productpage": {
@@ -70,7 +70,7 @@ def generate():
     for name, cfg in SERVICES_CONFIG.items():
         env_vars = [
             f"SERVICE_NAME={name}",
-            f"OTEL_EXPORTER_OTLP_ENDPOINT=http://{COLLECTOR_IP}:4318/v1/traces"
+            f"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://collector:4318/v1/traces"
         ]
 
         for k, v in cfg["env"].items():
@@ -85,6 +85,9 @@ def generate():
                 "context": cfg["context"]
             },
             "ports": [cfg["port"]],
+            "extra_hosts": [
+                f"collector:{COLLECTOR_IP}"
+            ],
             "environment": env_vars,
             "networks": ["bookinfo-net"]
         }

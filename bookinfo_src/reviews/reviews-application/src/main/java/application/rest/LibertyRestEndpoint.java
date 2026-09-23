@@ -79,7 +79,7 @@ public class LibertyRestEndpoint extends Application {
         )));
 
     String otlpEndpoint = System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT") == null
-        ? "http://localhost:4318/v1/traces"
+        ? "http://collector:4318/v1/traces"
         : System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT");
 
     OtlpHttpSpanExporter otlpExporter = OtlpHttpSpanExporter.builder()
