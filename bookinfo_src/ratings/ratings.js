@@ -18,11 +18,13 @@ const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventi
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { trace, context, propagation } = require('@opentelemetry/api');
+const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
 
 const serviceName = process.env.SERVICE_NAME || 'ratings';
 const serviceVersion = process.env.SERVICE_VERSION || 'v1';
 const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
+
+const UPSTREAM_ERROR_RATE = parseFloat(process.env.UPSTREAM_ERROR_RATE || '0.01');
 
 const provider = new NodeTracerProvider({
   resource: new Resource({
@@ -292,10 +294,26 @@ function handleRequest (request, response) {
         span.end();
       });
 
+      //upstream error
+      if (Math.random() < UPSTREAM_ERROR_RATE) {
+        throw new Error("Upstream Error");
+      }
+
+      //No downstream error since it is the leaf node
+
       dispatcher.dispatch(request, response);
     } catch (err) {
       console.log(err);
       span.recordException(err);
+
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: err.message,
+      });
+
+      response.writeHead(500, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: err.message }));
+
       span.end();
     }
   });
