@@ -86,7 +86,6 @@ def generate():
             },
             "ports": [cfg["port"]],
             "environment": env_vars,
-            "depends_on": ["collector"],
             "networks": ["bookinfo-net"]
         }
 
