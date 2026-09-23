@@ -37,7 +37,7 @@ import os
 import requests
 import simplejson as json
 import sys
-
+import httpx
 
 # These two lines enable debugging at httplib level (requests->urllib3->http.client)
 # You will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
@@ -46,6 +46,10 @@ import http.client as http_client
 http_client.HTTPConnection.debuglevel = 0
 
 app = Flask(__name__)
+
+# add connection pool
+limits = httpx.Limits(max_keepalive_connections=100, max_connections=500)
+client = httpx.AsyncClient(limits=limits)
 
 # global env
 SERVICE_NAME = os.getenv("SERVICE_NAME", "productpage")
@@ -292,7 +296,7 @@ def floodReviews(product_id, headers):
 
 
 @app.route('/productpage')
-def front():
+async def front():
     context = propagate.extract(request.headers)
     with tracer.start_as_current_span("productpage", context=context, record_exception=False) as span:
 
@@ -304,12 +308,15 @@ def front():
             headers = getForwardHeaders(request, context=trace.set_span_in_context(span))
             user = session.get('user', '')
             product = getProduct(product_id)
-            detailsStatus, details = getProductDetails(product_id, headers)
 
-            if flood_factor > 0:
-                floodReviews(product_id, headers)
+            # if flood_factor > 0:
+            #     floodReviews(product_id, headers)
 
-            reviewsStatus, reviews = getProductReviews(product_id, headers)
+            (detailsStatus, details), (reviewsStatus, reviews) = await asyncio.gather(
+                getProductDetails(product_id, headers),
+                getProductReviews(product_id, headers),
+                return_exceptions=False
+            )
 
             if detailsStatus != 200 or reviewsStatus != 200:
                 raise Exception(f"Downstream Error")
@@ -383,17 +390,18 @@ def getProduct(product_id):
         return products[product_id]
 
 
-def getProductDetails(product_id, headers):
+# 改成async
+async def getProductDetails(product_id, headers):
     res = None
     try:
         url = details['name'] + "/" + details['endpoint'] + "/" + str(product_id)
-        res = send_request(url, headers=headers, timeout=3.0)
+        res = await client.get(url, headers=headers, timeout=3.0)
 
         if res and res.status_code == 200:
             request_result_counter.labels(destination_app='details', response_code=200).inc()
             return 200, res.json()
 
-    # 就算details return error，也不要直接變成exception讓reviews不會跑到
+    # 就算details return error，也不要直接變成exception讓reviews跑不到
     except Exception:
         pass
         
@@ -402,14 +410,14 @@ def getProductDetails(product_id, headers):
     return status, {'error': 'Sorry, product details are currently unavailable for this book.'}
 
 
-def getProductReviews(product_id, headers):
+async def getProductReviews(product_id, headers):
     # Do not remove. Bug introduced explicitly for illustration in fault injection task
     # TODO: Figure out how to achieve the same effect using Envoy retries/timeouts
     res = None
     for _ in range(2):
         try:
             url = reviews['name'] + "/" + reviews['endpoint'] + "/" + str(product_id)
-            res = send_request(url, headers=headers, timeout=3.0)
+            res = await client.get(url, headers=headers, timeout=3.0)
             if res and res.status_code == 200:
                 request_result_counter.labels(destination_app='reviews', response_code=200).inc()
                 return 200, res.json()
