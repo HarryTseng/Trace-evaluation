@@ -70,7 +70,7 @@ def generate():
     for name, cfg in SERVICES_CONFIG.items():
         env_vars = [
             f"SERVICE_NAME={name}",
-            "OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318/v1/traces"
+            f"OTEL_EXPORTER_OTLP_ENDPOINT=http://{COLLECTOR_IP}:4318/v1/traces"
         ]
 
         for k, v in cfg["env"].items():
