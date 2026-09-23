@@ -17,6 +17,7 @@
 import time
 import random
 from fastapi import HTTPException
+from flask import abort
 from flask import Flask, request, session, render_template, redirect, g
 from json2html import json2html
 from opentelemetry import trace
@@ -336,7 +337,7 @@ async def front():
         except Exception as e:
             span.set_status(StatusCode.ERROR)
             span.set_attribute("error.msg", str(e))
-            raise HTTPException(status_code=500, detail=str(e))
+            abort(500, description=str(e))
 
 
 # The API:
