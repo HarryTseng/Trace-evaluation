@@ -26,11 +26,15 @@ service_name = ENV['SERVICE_NAME'] || 'details'
 service_version = ENV['SERVICE_VERSION'] || 'v1'
 otlp_endpoint = ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318/v1/traces'
 
-UPSTREAM_ERROR_RATE = (ENV['UPSTREAM_ERROR_RATE'] || '1').to_f
+UPSTREAM_ERROR_RATE = (ENV['UPSTREAM_ERROR_RATE'] || '0.01').to_f
+HEAD_SAMPLING_RATE = (ENV['HEAD_SAMPLING_RATE'] || '1.0').to_f
 
 OpenTelemetry::SDK.configure do |c|
   c.service_name = service_name
   c.service_version = service_version
+
+  ratio_sampler = OpenTelemetry::SDK::Trace::Samplers.trace_id_ratio_based(head_sampling_rate)
+  c.sampler = OpenTelemetry::SDK::Trace::Samplers.parent_based(root: ratio_sampler)
   
   c.use_all if respond_to?(:use_all)
 

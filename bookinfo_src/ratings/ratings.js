@@ -25,11 +25,15 @@ const serviceVersion = process.env.SERVICE_VERSION || 'v1';
 const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
 
 const UPSTREAM_ERROR_RATE = parseFloat(process.env.UPSTREAM_ERROR_RATE || '0.01');
+const HEAD_SAMPLING_RATE = parseFloat(process.env.HEAD_SAMPLING_RATE || '1.0');
 
 const provider = new NodeTracerProvider({
   resource: new Resource({
     [SemanticResourceAttributes.SERVICE_NAME]: serviceName,
     [SemanticResourceAttributes.SERVICE_VERSION]: serviceVersion,
+  }),
+  sampler: new ParentBasedSampler({
+    root: new TraceIdRatioBasedSampler(HEAD_SAMPLING_RATE),
   }),
 });
 
