@@ -384,32 +384,38 @@ def getProduct(product_id):
 
 
 def getProductDetails(product_id, headers):
+    res = None
     try:
         url = details['name'] + "/" + details['endpoint'] + "/" + str(product_id)
         res = send_request(url, headers=headers, timeout=3.0)
-    except BaseException:
-        res = None
-    if res and res.status_code == 200:
-        request_result_counter.labels(destination_app='details', response_code=200).inc()
-        return 200, res.json()
-    else:
-        status = res.status_code if res is not None and res.status_code else 500
-        request_result_counter.labels(destination_app='details', response_code=status).inc()
-        return status, {'error': 'Sorry, product details are currently unavailable for this book.'}
+
+        if res and res.status_code == 200:
+            request_result_counter.labels(destination_app='details', response_code=200).inc()
+            return 200, res.json()
+
+    # 就算details return error，也不要直接變成exception讓reviews不會跑到
+    except Exception:
+        pass
+        
+    status = res.status_code if res is not None and res.status_code else 500
+    request_result_counter.labels(destination_app='details', response_code=status).inc()
+    return status, {'error': 'Sorry, product details are currently unavailable for this book.'}
 
 
 def getProductReviews(product_id, headers):
     # Do not remove. Bug introduced explicitly for illustration in fault injection task
     # TODO: Figure out how to achieve the same effect using Envoy retries/timeouts
+    res = None
     for _ in range(2):
         try:
             url = reviews['name'] + "/" + reviews['endpoint'] + "/" + str(product_id)
             res = send_request(url, headers=headers, timeout=3.0)
-        except BaseException:
-            res = None
-        if res and res.status_code == 200:
-            request_result_counter.labels(destination_app='reviews', response_code=200).inc()
-            return 200, res.json()
+            if res and res.status_code == 200:
+                request_result_counter.labels(destination_app='reviews', response_code=200).inc()
+                return 200, res.json()
+        except Exception:
+            pass
+        
     status = res.status_code if res is not None and res.status_code else 500
     request_result_counter.labels(destination_app='reviews', response_code=status).inc()
     return status, {'error': 'Sorry, product reviews are currently unavailable for this book.'}
