@@ -1,0 +1,45 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  
+  probabilistic_sampler:
+    sampling_percentage: 100
+
+  tail_sampling:
+    policies:
+      - name: error-trace
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+
+exporters:
+  debug:
+    verbosity: detailed
+  file:
+    path: /tmp/traces.bookinfo.json
+  prometheus:
+    endpoint: "0.0.0.0:8080"
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  telemetry:
+    metrics:
+      level: detailed
+
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [probabilistic_sampler, batch]
+      exporters: [debug, file]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, debug]
