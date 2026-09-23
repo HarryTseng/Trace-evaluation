@@ -33,7 +33,7 @@ OpenTelemetry::SDK.configure do |c|
   c.service_name = service_name
   c.service_version = service_version
 
-  ratio_sampler = OpenTelemetry::SDK::Trace::Samplers.trace_id_ratio_based(head_sampling_rate)
+  ratio_sampler = OpenTelemetry::SDK::Trace::Samplers.trace_id_ratio_based(HEAD_SAMPLING_RATE)
   c.sampler = OpenTelemetry::SDK::Trace::Samplers.parent_based(root: ratio_sampler)
   
   c.use_all if respond_to?(:use_all)
