@@ -93,10 +93,7 @@ begin
           id = Integer(pathParts[-1])
           details = get_book_details(id, headers)
 
-          # Downstream error
-          if rand < (UPSTREAM_ERROR_RATE + DOWNSTREAM_ERROR_RATE)
-            raise StandardError, "Downstream Error"
-          end
+          # No downstream error since it is the leaf node
 
           res.body = details.to_json
           res['Content-Type'] = 'application/json'
