@@ -16,9 +16,8 @@
 
 import time
 import random
-from fastapi import HTTPException
 from flask import abort
-from flask import Flask, request, session, render_template, redirect, g
+from quart import Quart as Flask, request, session, render_template, redirect, g, abort
 from json2html import json2html
 from opentelemetry import trace
 # from opentelemetry.instrumentation.flask import FlaskInstrumentor
@@ -27,7 +26,7 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, ParentBased
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry import propagate
 from opentelemetry.trace import StatusCode
@@ -36,9 +35,9 @@ import asyncio
 import logging
 import os
 import requests
-import simplejson as json
 import sys
 import httpx
+import json
 
 # These two lines enable debugging at httplib level (requests->urllib3->http.client)
 # You will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
@@ -55,8 +54,8 @@ client = httpx.AsyncClient(limits=limits)
 # global env
 SERVICE_NAME = os.getenv("SERVICE_NAME", "productpage")
 HEAD_SAMPLING_RATE = float(os.getenv("HEAD_SAMPLING_RATE", "1.0"))
-UPSTREAM_ERROR_RATE = float(os.getenv("UPSTREAM_ERROR_RATE", 0))
-DOWNSTREAM_ERROR_RATE = float(os.getenv("DOWNSTREAM_ERROR_RATE", 0))
+UPSTREAM_ERROR_RATE = float(os.getenv("UPSTREAM_ERROR_RATE", 0.01))
+DOWNSTREAM_ERROR_RATE = float(os.getenv("DOWNSTREAM_ERROR_RATE", 0.04))
 
 #Otel
 custom_sampler = ParentBased(root=TraceIdRatioBased(HEAD_SAMPLING_RATE))
@@ -325,7 +324,7 @@ async def front():
             if random.random() < UPSTREAM_ERROR_RATE + DOWNSTREAM_ERROR_RATE:
                 raise Exception("Downstream Error")
 
-            return render_template(
+            return await render_template(
                 'productpage.html',
                 detailsStatus=detailsStatus,
                 reviewsStatus=reviewsStatus,
@@ -347,16 +346,16 @@ def productsRoute():
 
 
 @app.route('/api/v1/products/<product_id>')
-def productRoute(product_id):
+async def productRoute(product_id):
     headers = getForwardHeaders(request)
-    status, details = getProductDetails(product_id, headers)
+    status, details = await getProductDetails(product_id, headers)
     return json.dumps(details), status, {'Content-Type': 'application/json'}
 
 
 @app.route('/api/v1/products/<product_id>/reviews')
-def reviewsRoute(product_id):
+async def reviewsRoute(product_id):
     headers = getForwardHeaders(request)
-    status, reviews = getProductReviews(product_id, headers)
+    status, reviews = await getProductReviews(product_id, headers)
     return json.dumps(reviews), status, {'Content-Type': 'application/json'}
 
 
