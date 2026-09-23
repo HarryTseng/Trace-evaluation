@@ -26,8 +26,7 @@ service_name = ENV['SERVICE_NAME'] || 'details'
 service_version = ENV['SERVICE_VERSION'] || 'v1'
 otlp_endpoint = ENV['OTEL_EXPORTER_OTLP_ENDPOINT'] || 'http://localhost:4318/v1/traces'
 
-UPSTREAM_ERROR_RATE = (ENV['UPSTREAM_ERROR_RATE'] || '0.01').to_f
-DOWNSTREAM_ERROR_RATE = (ENV['DOWNSTREAM_ERROR_RATE'] || '0.04').to_f
+UPSTREAM_ERROR_RATE = (ENV['UPSTREAM_ERROR_RATE'] || '1').to_f
 
 OpenTelemetry::SDK.configure do |c|
   c.service_name = service_name
@@ -84,12 +83,13 @@ begin
         pathParts = req.path.split('/')
         headers = get_forward_headers(req)
 
-        # Upstream error
-        if rand < UPSTREAM_ERROR_RATE
-          raise StandardError, "Upstream Error"
-        end
-
         begin
+
+          # Upstream error
+          if rand < UPSTREAM_ERROR_RATE
+            raise StandardError, "Upstream Error"
+          end
+          
           id = Integer(pathParts[-1])
           details = get_book_details(id, headers)
 
