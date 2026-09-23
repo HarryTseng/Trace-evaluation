@@ -1,7 +1,7 @@
 import yaml
 
 COLLECTOR_IP = "127.0.0.1"
-HEAD_SAMPLING_RATE = 0.3  # 0是tail
+HEAD_SAMPLING_RATE = 1  # 0是tail
 
 SERVICES_CONFIG = {
     "productpage": {
@@ -55,7 +55,7 @@ def generate():
         "command": ["--config=/etc/otelcol/config.bookinfo.yaml"],
         "volumes": [
             "./config.bookinfo.yaml:/etc/otelcol/config.bookinfo.yaml",
-            "./traces.bookinfo.json:/tmp/traces.bookinfo.json"
+            "./traces_bookinfo.json:/tmp/traces_bookinfo.json"
         ],
         "ports": [
             "4317:4317",

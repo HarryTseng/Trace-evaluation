@@ -23,7 +23,7 @@ exporters:
   debug:
     verbosity: detailed
   file:
-    path: /tmp/traces.bookinfo.json
+    path: /tmp/traces_bookinfo.json
   prometheus:
     endpoint: "0.0.0.0:8080"
     resource_to_telemetry_conversion:
