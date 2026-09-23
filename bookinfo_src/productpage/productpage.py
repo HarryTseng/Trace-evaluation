@@ -311,8 +311,11 @@ def front():
 
             reviewsStatus, reviews = getProductReviews(product_id, headers)
 
+            if detailsStatus != 200 or reviewsStatus != 200:
+                raise Exception(f"Downstream Error")
+
             if random.random() < UPSTREAM_ERROR_RATE + DOWNSTREAM_ERROR_RATE:
-                raise Exception("Downstream Error Happen")
+                raise Exception("Downstream Error")
 
             return render_template(
                 'productpage.html',
