@@ -16,8 +16,7 @@
 const { Resource } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
-const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
-const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
+const { SimpleSpanProcessor, ParentBasedSampler, TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-base');const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
 
 const serviceName = process.env.SERVICE_NAME || 'ratings';
