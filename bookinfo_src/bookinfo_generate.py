@@ -7,8 +7,10 @@ SERVICES_CONFIG = {
     "productpage": {
         "context": "./productpage",
         "port": "9080:9080",
-        "command": "gunicorn --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:9080 productpage:app",
-        "env": {}
+        "command": "gunicorn --config gunicorn.conf.py --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:9080 productpage:app",
+        "env": {
+            "PROMETHEUS_MULTIPROC_DIR":"/tmp/prometheus_multiproc"
+        }
     },
     "reviews": {
         "context": "./reviews",

@@ -14,6 +14,10 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+import os
+os.environ.setdefault("PROMETHEUS_MULTIPROC_DIR", "/tmp/prometheus_multiproc")
+os.makedirs(os.environ["PROMETHEUS_MULTIPROC_DIR"], exist_ok=True)
+
 import time
 import random
 from flask import abort
@@ -30,10 +34,9 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry import propagate
 from opentelemetry.trace import StatusCode
-from prometheus_client import Counter, generate_latest
 import asyncio
+from prometheus_client import Counter, generate_latest, CollectorRegistry, multiprocess
 import logging
-import os
 import requests
 import sys
 import httpx
@@ -312,7 +315,7 @@ async def front():
             # if flood_factor > 0:
             #     floodReviews(product_id, headers)
 
-            (detailsStatus, details), (reviewsStatus, reviews) = await asyncio.gather(
+            (detailsStatus, details), (reviewsStatus, reviews, retryMaskedFailure) = await asyncio.gather(
                 getProductDetails(product_id, headers),
                 getProductReviews(product_id, headers),
                 return_exceptions=False
@@ -323,6 +326,9 @@ async def front():
 
             if random.random() < UPSTREAM_ERROR_RATE + DOWNSTREAM_ERROR_RATE:
                 raise Exception("Downstream Error")
+
+            if retryMaskedFailure:
+                request_result_counter.labels(destination_app='reviews', response_code='retry_masked_failure').inc()
 
             return await render_template(
                 'productpage.html',
@@ -355,7 +361,7 @@ async def productRoute(product_id):
 @app.route('/api/v1/products/<product_id>/reviews')
 async def reviewsRoute(product_id):
     headers = getForwardHeaders(request)
-    status, reviews = await getProductReviews(product_id, headers)
+    status, reviews, _ = await getProductReviews(product_id, headers)
     return json.dumps(reviews), status, {'Content-Type': 'application/json'}
 
 
@@ -368,7 +374,10 @@ def ratingsRoute(product_id):
 
 @app.route('/metrics')
 def metrics():
-    return generate_latest()
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)
+    data = generate_latest(registry)
+    return data, 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
 # Data providers:
@@ -414,19 +423,24 @@ async def getProductReviews(product_id, headers):
     # Do not remove. Bug introduced explicitly for illustration in fault injection task
     # TODO: Figure out how to achieve the same effect using Envoy retries/timeouts
     res = None
+    retry_masked_failure = False
+
     for _ in range(2):
         try:
             url = reviews['name'] + "/" + reviews['endpoint'] + "/" + str(product_id)
             res = await client.get(url, headers=headers, timeout=3.0)
             if res and res.status_code == 200:
                 request_result_counter.labels(destination_app='reviews', response_code=200).inc()
-                return 200, res.json()
+                if _ == 1:
+                    retry_masked_failure = True
+                
+                return 200, res.json(), retry_masked_failure
         except Exception:
             pass
         
     status = res.status_code if res is not None and res.status_code else 500
     request_result_counter.labels(destination_app='reviews', response_code=status).inc()
-    return status, {'error': 'Sorry, product reviews are currently unavailable for this book.'}
+    return status, {'error': 'Sorry, product reviews are currently unavailable for this book.'}, False
 
 
 def getProductRatings(product_id, headers):
