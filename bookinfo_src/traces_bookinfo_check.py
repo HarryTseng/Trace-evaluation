@@ -12,7 +12,6 @@ def analyze_traces(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # 使用 raw_decode 兼顧多行 JSON 與 JSONL 格式，並避免結尾截斷問題
         decoder = json.JSONDecoder()
         idx = 0
         length = len(content)
@@ -27,7 +26,7 @@ def analyze_traces(file_path):
                 data, end = decoder.raw_decode(content, idx)
                 idx = end
             except json.JSONDecodeError:
-                break  # 遇到不完整或格式毀損的結尾時安全退出
+                break
 
             resource_spans = data.get('resourceSpans', []) if isinstance(data, dict) else []
 
@@ -39,13 +38,6 @@ def analyze_traces(file_path):
                             continue
 
                         unique_trace_ids.add(trace_id)
-
-                        # 只以「根 span」(沒有 parentSpanId，也就是使用者實際收到的
-                        # 最終結果，例如 productpage 這一筆) 來判斷該 trace 是否為錯誤。
-                        # 若只要 trace 中任何一個 span 出現 status.code=2 就算錯誤，
-                        # 會把「內部重試後成功」的 trace 也誤算進去，導致錯誤數偏高。
-                        if span.get('parentSpanId'):
-                            continue
 
                         status = span.get('status', {})
                         code = status.get('code')
